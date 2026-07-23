@@ -317,7 +317,14 @@
 
 <script>
 (function () {
-  var API = "https://extendsclass.com/api/json-storage/bin/cdabeba";
+  // 저장소 주소는 state.json에서 읽는다 (만료 전에 자동화가 새 blob으로 교체)
+  var API = "https://jsonblob.com/api/jsonBlob/019f8d67-e9dc-76a5-b184-d384d72fab29";
+  function resolveApi() {
+    return fetch("./state.json?t=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) { if (s && s.api) API = s.api; })
+      .catch(function () {});
+  }
   var YEAR = 2026, MONTH = 8; // 2026년 9월 (JS month index)
   var DAYS_IN_MONTH = 30;
   var DEADLINE = new Date("2026-07-24T17:00:00+09:00").getTime();
@@ -334,7 +341,6 @@
   var selected = {};          // { "2026-09-21": true }
   var serverVotes = {};       // { name: { dates: [...], at: ts } }
   var lastSyncAt = null;
-  var healed = false;
 
   var $ = function (id) { return document.getElementById(id); };
   var calEl = $("cal"), msgEl = $("msg"), nameEl = $("name");
@@ -412,7 +418,9 @@
 
   // ---- 서버 통신 ----
   function fetchVotes() {
-    return fetch(API + "?t=" + Date.now(), { cache: "no-store" })
+    return resolveApi().then(function () {
+      return fetch(API + "?t=" + Date.now(), { cache: "no-store" });
+    })
       .then(function (r) {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
@@ -605,10 +613,9 @@
   function poll() {
     fetchVotes()
       .then(function () {
-        // 서버 데이터가 날아갔는데 내 브라우저에 백업이 있으면 한 번 복구
+        // 서버(새 blob)에 내 투표가 없는데 브라우저 백업이 있으면 자동 복구
         var mine = myLocal();
-        if (!healed && mine && mine.name && mine.dates && mine.dates.length && !serverVotes[mine.name] && !isClosed()) {
-          healed = true;
+        if (mine && mine.name && mine.dates && mine.dates.length && !serverVotes[mine.name] && !isClosed()) {
           serverVotes[mine.name] = { dates: mine.dates, at: Date.now() };
           putVotes().catch(function () {});
         }
